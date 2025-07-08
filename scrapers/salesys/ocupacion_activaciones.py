@@ -136,6 +136,10 @@ def generar_tiempos_por_franja(df_agentes, df_franjas):
                     'tiempo_segundos': duracion_segundos
                })
 
+    # Asegurar que siempre retornemos un DataFrame con las columnas esperadas
+    if not resultados:
+        return pd.DataFrame(columns=['codigo_salesys', 'funcion', 'fecha', 'franja', 'tiempo_segundos'])
+    
     return pd.DataFrame(resultados)
 
 # Generar tiempos por franjas para cada registro 'SIG ON' y 'RES RESUME'
@@ -143,35 +147,47 @@ df_resultado_sig_on = generar_tiempos_por_franja(filtro_sig_on_por_nomina, franj
 df_resultado_res_resume = generar_tiempos_por_franja(filtro_res_resume_por_nomina, franjas)
 
 # Concatenar ambos DFs que tienen solo el estado agente 'SIG ON' y 'RES RESUME'
-df_consolidado = pd.concat([df_resultado_sig_on, df_resultado_res_resume])
-df_consolidado['fecha'] = pd.to_datetime(df_consolidado['fecha'])
+df_consolidado = pd.concat([df_resultado_sig_on, df_resultado_res_resume], ignore_index=True)
+
+# Solo convertir fecha si hay datos
+if not df_consolidado.empty:
+    df_consolidado['fecha'] = pd.to_datetime(df_consolidado['fecha'])
 
 df_activaciones['codigo_salesys'] = df_activaciones['codigo_salesys'].astype('Int64')
 
-# Agrupamos por 'codigo_salesys', 'funcion', 'fecha', y 'franja', y sumamos el tiempo en segundos
-df_consolidado_agrupado = df_consolidado.groupby(['codigo_salesys', 'funcion', 'fecha', 'franja']).agg({'tiempo_segundos': 'sum'}).reset_index()
+# Solo procesar si hay datos consolidados
+if not df_consolidado.empty:
+    # Agrupamos por 'codigo_salesys', 'funcion', 'fecha', y 'franja', y sumamos el tiempo en segundos
+    df_consolidado_agrupado = df_consolidado.groupby(['codigo_salesys', 'funcion', 'fecha', 'franja']).agg({'tiempo_segundos': 'sum'}).reset_index()
+
+    # Cambiar los registros de la columna función por 'DISPONIBLE'
+    df_consolidado_agrupado['funcion'] = 'DISPONIBLE'  # Puedes usar cualquier etiqueta común
+
+    # Agrupar por agente, fecha, franja y sumar los tiempos
+    df_consolidado_final = df_consolidado_agrupado.groupby(['fecha', 'codigo_salesys', 'franja']).agg({'tiempo_segundos': 'sum'}).reset_index()
+    df_consolidado_final['tiempo_segundos'] = df_consolidado_final['tiempo_segundos'].astype('Int64')
+else:
+    print("[WARNING] No hay datos consolidados para procesar. Creando DataFrame vacío.")
+    df_consolidado_final = pd.DataFrame(columns=['fecha', 'codigo_salesys', 'franja', 'tiempo_segundos'])
 
 
-# Cambiar los registros de la columna función por 'DISPONIBLE'
-df_consolidado_agrupado['funcion'] = 'DISPONIBLE'  # Puedes usar cualquier etiqueta común
+# Solo hacer merge si hay datos consolidados
+if not df_consolidado_final.empty:
+    # Realizar el merge y seleccionar solo las columnas deseadas del DataFrame secundario
+    es_agente_nomina = pd.merge(
+        df_consolidado_final,
+        df_nomina[['fecha', 'codigo_salesys', 'nombre', 'condicion', 'cargo', 'campana']],  # Seleccionar columnas deseadas
+        on=['fecha', 'codigo_salesys'],
+        how='left')
 
-
-# Agrupar por agente, fecha, franja y sumar los tiempos
-df_consolidado_final = df_consolidado_agrupado.groupby(['fecha', 'codigo_salesys', 'franja']).agg({'tiempo_segundos': 'sum'}).reset_index()
-df_consolidado_final['tiempo_segundos'] = df_consolidado_final['tiempo_segundos'].astype('Int64')
-
-
-# Realizar el merge y seleccionar solo las columnas deseadas del DataFrame secundario
-es_agente_nomina = pd.merge(
-    df_consolidado_final,
-    df_nomina[['fecha', 'codigo_salesys', 'nombre', 'condicion', 'cargo', 'campana']],  # Seleccionar columnas deseadas
-    on=['fecha', 'codigo_salesys'],
-    how='left')
-
-# Ordenar columnas de la tabla generada del merge
-columnas_agen_nom = ['fecha', 'codigo_salesys', 'nombre', 'condicion', 'cargo', 'campana', 'franja', 'tiempo_segundos']
-es_agente_nomina_select = es_agente_nomina[columnas_agen_nom]
-es_agente_nomina_select['codigo_salesys'] = es_agente_nomina_select['codigo_salesys'].astype('Int64')
+    # Ordenar columnas de la tabla generada del merge
+    columnas_agen_nom = ['fecha', 'codigo_salesys', 'nombre', 'condicion', 'cargo', 'campana', 'franja', 'tiempo_segundos']
+    es_agente_nomina_select = es_agente_nomina[columnas_agen_nom]
+    es_agente_nomina_select['codigo_salesys'] = es_agente_nomina_select['codigo_salesys'].astype('Int64')
+else:
+    print("[WARNING] No hay datos para hacer merge. Creando DataFrame vacío.")
+    columnas_agen_nom = ['fecha', 'codigo_salesys', 'nombre', 'condicion', 'cargo', 'campana', 'franja', 'tiempo_segundos']
+    es_agente_nomina_select = pd.DataFrame(columns=columnas_agen_nom)
 
 # Ordenar columnas de la tabla validaciones
 columnas_validaciones = ['asesor', 'codigo_salesys', 'hora_inicio_call_center', 'hora_fin_call_center']

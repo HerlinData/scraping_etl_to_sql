@@ -1,1 +1,7 @@
 python-dotenv
+selenium
+pandas
+sqlalchemy
+pyodbc
+schedule
+flet
