@@ -1,0 +1,21 @@
+estado_agente_v2:
+  form_url: "http://amgclaro.touscorp.com/SaleSys/index.php/newstylereports/report_?id=259"
+  rutas:
+    - "{year}/Estado Agente/{month}"
+
+RGA:
+  form_url: "http://amgclaro.touscorp.com/SaleSys/index.php/generaldeatencionesreport/form"
+  archivos:
+    HFC:
+      - "{year}/Activaciones/{month}/{product}"
+    FTTH:
+      - "{year}/Activaciones/{month}/{product}"
+    EMPRESA:
+      - "{year}/Activaciones/{month}/{product}"
+    LTE:
+      - "{year}/Activaciones/{month}/{product}"
+    OTROS:
+      - "{year}/Activaciones/{month}/{product}"
+    DELIVERY:
+      - "{year}/Delivery/{month}/General"
+

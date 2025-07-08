@@ -1,0 +1,32 @@
+# Archivos de entorno con credenciales sensibles
+.env
+
+# Archivos temporales
+temp/
+*.tmp
+*.crdownload
+
+# Logs
+logs/
+*.log
+
+# Reportes generados
+emp/
+*.csv
+
+# Cache de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
