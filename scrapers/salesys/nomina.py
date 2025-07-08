@@ -44,7 +44,7 @@ def cargar_Nomina_actual():
         }
         fecha_mes_value = meses_es[mes_value]
 
-        print(f"🚀 Iniciando carga de nómina para: {fecha_value} ({fecha_mes_value})")
+        print(f"[LAUNCH] Iniciando carga de nómina para: {fecha_value} ({fecha_mes_value})")
 
         # Lógica de carga
         CargaNominaValidaciones(fecha_value, fecha_año_value, mes_value)
@@ -61,9 +61,9 @@ def cargar_Nomina_actual():
         CargaNominaAghaso(fecha_value, fecha_año_value, mes_value)
         CargaNominaSoporteVentaFibraFija(fecha_value, fecha_año_value, mes_value)
 
-        print(f"✅ Carga de nómina finalizada para: {fecha_value}")
+        print(f"[SUCCESS] Carga de nómina finalizada para: {fecha_value}")
 
     except Exception as e:
-        print(f"❌ Error al ejecutar la carga de nómina: {str(e)}")
+        print(f"[ERROR] Error al ejecutar la carga de nómina: {str(e)}")
 
 cargar_Nomina_actual()

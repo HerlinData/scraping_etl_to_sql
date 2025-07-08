@@ -10,13 +10,53 @@ from core.database import process_db
 # Configurar logging
 log_dir = Path("logs")
 log_dir.mkdir(exist_ok=True)
+
+# Configurar handler para archivo (con emojis)
+file_handler = logging.FileHandler(
+    log_dir / f"scraper_{datetime.now().strftime('%Y%m%d')}.log",
+    encoding='utf-8'
+)
+file_handler.setLevel(logging.INFO)
+
+# Configurar handler para consola (sin emojis)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Formateador para archivo (con emojis)
+file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(file_formatter)
+
+# Formateador para consola (sin emojis)
+class NoEmojiFormatter(logging.Formatter):
+    def format(self, record):
+        msg = super().format(record)
+        # Reemplazar emojis con texto
+        emoji_replacements = {
+            '🏁': '[START]',
+            '📅': '[SCHEDULE]',
+            '⏰': '[TIME]',
+            '📊': '[METRICS]',
+            '🚀': '[LAUNCH]',
+            '✅': '[SUCCESS]',
+            '❌': '[ERROR]',
+            '💥': '[CRASH]',
+            '🔄': '[RETRY]',
+            '🎯': '[COMPLETE]',
+            '⚠️': '[WARNING]',
+            '🛑': '[STOP]',
+            '🎉': '[CELEBRATION]'
+        }
+        for emoji, replacement in emoji_replacements.items():
+            msg = msg.replace(emoji, replacement)
+        return msg
+
+console_formatter = NoEmojiFormatter('%(asctime)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(console_formatter)
+
+# Configurar logger principal
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_dir / f"scraper_{datetime.now().strftime('%Y%m%d')}.log"),
-        logging.StreamHandler()
-    ]
+    handlers=[file_handler, console_handler]
 )
 logger = logging.getLogger(__name__)
 

@@ -64,11 +64,11 @@ def descargar_informes_rga(
             driver.get(FORM_URL)
             WebDriverWait(driver, 8).until(lambda d: d.current_url.startswith("http"))
             if driver.current_url.lower().startswith(FORM_URL.lower()):
-                log("✅ Login exitoso y en formulario correcto.")
+                log("[SUCCESS] Login exitoso y en formulario correcto.")
                 login_ok = True
                 break
             else:
-                log(f"⚠️  No se llegó al formulario, url actual: {driver.current_url}")
+                log(f"[WARNING]  No se llegó al formulario, url actual: {driver.current_url}")
                 driver.close()
                 driver.switch_to.window(driver.window_handles[0])
                 login_ok = False
@@ -83,7 +83,7 @@ def descargar_informes_rga(
             dia = fecha_dt.strftime('%d')
             fecha_sistema = fecha_dt.strftime('%Y/%m/%d')
 
-            log(f"\n📅 ==== Fecha: {fecha} ====")
+            log(f"\n[SCHEDULE] ==== Fecha: {fecha} ====")
             for producto in productos:
                 res = {'status': None, 'mensaje': ''}
                 try:
@@ -142,7 +142,7 @@ def descargar_informes_rga(
                             EC.presence_of_element_located((By.ID, "MGSJE"))
                         )
                         if "no data found" in popup.text.lower():
-                            log(f"[{producto}] ⚠️ No data found (en popup #MGSJE): Saltando directo al formulario.")
+                            log(f"[{producto}] [WARNING] No data found (en popup #MGSJE): Saltando directo al formulario.")
                             res['status'] = "no_data"
                             res['mensaje'] = "No data found"
                             regresar_a_form = True
@@ -156,7 +156,7 @@ def descargar_informes_rga(
                                 alert = driver.switch_to.alert
                                 alert_text = alert.text
                                 alert.accept()
-                                log(f"[{producto}] ⚠️ Pop-up detectado y cerrado: '{alert_text}'. Sin data, saltando directo al formulario.")
+                                log(f"[{producto}] [WARNING] Pop-up detectado y cerrado: '{alert_text}'. Sin data, saltando directo al formulario.")
                                 pop_up_detectado = True
                                 res['status'] = "popup"
                                 res['mensaje'] = f"Pop-up cerrado: {alert_text}"
@@ -183,7 +183,7 @@ def descargar_informes_rga(
                                     if not renombrar_archivo(old_path, new_path):
                                         res['status'] = "error"
                                         res['mensaje'] = f"No se pudo renombrar el archivo '{archivo_descargado}'."
-                                        log(f"[{producto}] ⚠️ {res['mensaje']}")
+                                        log(f"[{producto}] [WARNING] {res['mensaje']}")
                                         continue
                                     rutas_cfg = form_config["archivos"]
                                     tpl_list = rutas_cfg.get(producto, [])
@@ -215,7 +215,7 @@ def descargar_informes_rga(
                 except Exception as e:
                     res['status'] = "error"
                     res['mensaje'] = f"Excepción general: {e}"
-                    log(f"[{producto}] ❌ {e}")
+                    log(f"[{producto}] [ERROR] {e}")
 
         driver.quit()
     except Exception as e:
