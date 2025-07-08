@@ -1,16 +1,23 @@
 import pandas as pd
 import sys
-import sqlalchemy
-from sqlalchemy import create_engine,text,Table, MetaData
 import locale
-import pyodbc
-import pandas as pd
 from datetime import datetime
 from datetime import datetime, timedelta
-
-from unidecode import unidecode
 import warnings
 warnings.filterwarnings('ignore')
+
+# Imports condicionales para evitar errores en debug
+DEBUG_MODE = False  # Cambiar a True para debug con datos simulados
+
+if not DEBUG_MODE:
+    import sqlalchemy
+    from sqlalchemy import create_engine,text,Table, MetaData
+    import pyodbc
+    from unidecode import unidecode
+else:
+    # Para debug, usar una función simple
+    def unidecode(text):
+        return text
 
 def conectar_bd(servidor, nombre_base_datos, usuario, contraseña):
     connection_string = f'mssql+pyodbc://{usuario}:{contraseña}@{servidor}/{nombre_base_datos}?driver=ODBC+Driver+17+for+SQL+Server'
@@ -18,20 +25,83 @@ def conectar_bd(servidor, nombre_base_datos, usuario, contraseña):
     print('Conexión exitosa')
     return engine
 
-franjas = pd.read_csv('Z:\\AMG Esuarezh\\scraping\\scrapers\\salesys\\franjas_horarias.csv', sep=',')
+franjas = pd.read_csv('/mnt/c/Users/Herlin/Desktop/scrap_claude/scrapers/salesys/franjas_horarias.csv', sep=',')
 
-servidor = '192.168.16.103'
-nombre_base_datos = 'BD_AMG'
-usuario = 'sqladmin'
-contraseña = 'Rf1pGIw7C42m'
-engine = conectar_bd(servidor, nombre_base_datos, usuario, contraseña)
+if DEBUG_MODE:
+    print("[DEBUG] Modo debug activado - usando datos simulados")
+    # Crear datos simulados para debug
+    df = pd.DataFrame({
+        'codigo_salesys': [1001, 1002, 1003],
+        'asesor': ['Agente1', 'Agente2', 'Agente3'],
+        'hora_inicio_call_center': pd.to_datetime(['2025-07-08 10:30:00', '2025-07-08 11:00:00', '2025-07-08 14:00:00']),
+        'hora_fin_call_center': pd.to_datetime(['2025-07-08 10:45:00', '2025-07-08 11:30:00', '2025-07-08 14:30:00'])
+    })
+    
+    df_2 = pd.DataFrame({
+        'fecha': pd.to_datetime(['2025-07-08', '2025-07-08', '2025-07-08', '2025-07-08']),
+        'codigo_salesys': [1001, 1002, 1001, 1002],
+        'funcion': ['SON - Sign On', 'SON - Sign On', 'RES - RESUME', 'RES - RESUME'],
+        'hora_inicio': pd.to_datetime(['2025-07-08 10:00:00', '2025-07-08 10:30:00', '2025-07-08 10:15:00', '2025-07-08 10:45:00']),
+        'hora_fin': pd.to_datetime(['2025-07-08 10:30:00', '2025-07-08 11:00:00', '2025-07-08 10:45:00', '2025-07-08 11:15:00'])
+    })
+    
+    df_3 = pd.DataFrame({
+        'fecha': pd.to_datetime(['2025-07-08', '2025-07-08', '2025-07-08']),
+        'codigo_salesys': [1001, 1002, 1003],
+        'nombre': ['Juan Perez', 'Maria Lopez', 'Carlos Gomez'],
+        'condicion': ['Activo', 'Activo', 'Activo'],
+        'cargo': ['Asesor', 'Asesor', 'Asesor'],
+        'campana': ['ACTIVACIONES', 'ACTIVACIONES', 'ACTIVACIONES']
+    })
+    
+    engine = None  # No necesitamos conexión real en modo debug
+else:
+    servidor = '192.168.16.103'
+    nombre_base_datos = 'BD_AMG'
+    usuario = 'sqladmin'
+    contraseña = 'Rf1pGIw7C42m'
+    engine = conectar_bd(servidor, nombre_base_datos, usuario, contraseña)
+    
+    # Leer datos desde la base de datos a un DataFrame
+    print(f"[DEBUG] Consultando datos para fecha: {fecha}")
+    
+    query1 = f"""SELECT nombre_usuario codigo_salesys, asesor, hora_inicio_call_center,
+                        hora_fin_call_center FROM TblActivacionesBD 
+                            WHERE CONVERT(DATE, hora_inicio_call_center ) = '{fecha}'
+                            AND NOT hora_inicio_call_center IS NULL"""
+    print(f"[DEBUG] Query1: {query1}")
+    
+    with engine.connect() as connection:
+        df = pd.read_sql(query1, con=connection)
+    print(f"[DEBUG] df (activaciones) shape: {df.shape}")
+
+    query2 = f"SELECT CONVERT(DATE, hora_inicio) fecha, codigo_del_agente codigo_salesys, [FUNCION] funcion, [hora_inicio], [hora_fin] FROM TblEstadoAgenteSaleSysBD WHERE CONVERT(DATE,[hora_inicio]) = '{fecha}'"
+    print(f"[DEBUG] Query2: {query2}")
+    
+    with engine.connect() as connection:
+        df_2 = pd.read_sql(query2, con=connection)
+    df_2['fecha'] = pd.to_datetime(df_2['fecha'])
+    print(f"[DEBUG] df_2 (estado_agente) shape: {df_2.shape}")
+
+    query3 = f"SELECT [fecha], [Codigo SaleSys] codigo_salesys, [Nombre Completo] nombre, [condicion], [cargo], [CAMPAÑA] campana FROM View_TblNomina WHERE CONVERT(DATE, [fecha]) = '{fecha}' AND campaña = 'ACTIVACIONES'"
+    print(f"[DEBUG] Query3: {query3}")
+    
+    with engine.connect() as connection:
+        df_3 = pd.read_sql(query3, con=connection)
+    df_3['codigo_salesys'] = df_3['codigo_salesys'].astype('Int64')
+    df_3['fecha'] = pd.to_datetime(df_3['fecha'])
+    print(f"[DEBUG] df_3 (nomina) shape: {df_3.shape}")
 
 
 # Establecer configuración regional en español
-locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+try:
+    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+except locale.Error:
+    print("[DEBUG] No se pudo establecer locale es_ES.UTF-8, usando default")
+    locale.setlocale(locale.LC_TIME, 'C')
 
 # Leer fecha/hora compartida desde archivo
-with open("shared_timestamp.txt", "r") as f:
+with open("/mnt/c/Users/Herlin/Desktop/scrap_claude/shared_timestamp.txt", "r") as f:
     fecha_hora = f.read().strip()
 
           
@@ -42,21 +112,7 @@ dia = fechacompleta.strftime('%d')
 mes = fechacompleta.strftime('%m')
 año = fechacompleta.year
 
-# Leer datos desde la base de datos a un DataFrame
-with engine.connect() as connection:
-    df = pd.read_sql(f"""SELECT nombre_usuario codigo_salesys, asesor, hora_inicio_call_center,
-                            hora_fin_call_center FROM TblActivacionesBD 
-                                WHERE CONVERT(DATE, hora_inicio_call_center ) = '{fecha}'
-                                AND NOT hora_inicio_call_center IS NULL""", con=connection)
-
-with engine.connect() as connection:
-    df_2 = pd.read_sql(f"SELECT CONVERT(DATE, hora_inicio) fecha, codigo_del_agente codigo_salesys, [FUNCION] funcion, [hora_inicio], [hora_fin] FROM TblEstadoAgenteSaleSysBD WHERE CONVERT(DATE,[hora_inicio]) = '{fecha}'", con=connection)
-df_2['fecha'] = pd.to_datetime(df_2['fecha'])
-
-with engine.connect() as connection:
-    df_3 = pd.read_sql(f"SELECT [fecha], [Codigo SaleSys] codigo_salesys, [Nombre Completo] nombre, [condicion], [cargo], [CAMPAÑA] campana FROM View_TblNomina WHERE CONVERT(DATE, [fecha]) = '{fecha}' AND campaña = 'ACTIVACIONES'", con=connection)
-df_3['codigo_salesys'] = df_3['codigo_salesys'].astype('Int64')
-df_3['fecha'] = pd.to_datetime(df_3['fecha'])
+# Los datos se cargan arriba en el bloque DEBUG_MODE o en el bloque de producción
 
 ###############
 fecha_hora = pd.to_datetime(fecha_hora)
@@ -93,7 +149,6 @@ df_estado_agente_sig_on['total_sec'] = (df_estado_agente_sig_on['hora_fin'] - df
 # Filtrar solo los estado agente 'RES RESUME' que tengan más o igual a 30 segundos
 filtro_res_resume = df_estado_agente_res_resume[(df_estado_agente_res_resume['total_sec'] >= 30)]
 filtro_sig_on = df_estado_agente_sig_on[(df_estado_agente_sig_on['total_sec'] >= 30)]
-
 
 df_estado_agente_res_resume_filtro = filtro_res_resume.drop('total_sec', axis=1)
 df_estado_agente_sig_on_filtro = filtro_sig_on.drop('total_sec', axis=1)
@@ -272,17 +327,25 @@ df_agrupado_final_franjas = pd.merge(
 df_to_sql = df_agrupado_final_franjas.rename(columns={'hora_inicio': 'rango_15min'})
 
 
-# Eliminar registros existentes de la misma fecha en la base de datos
-with engine.connect() as connection:
+if DEBUG_MODE:
+    print("[DEBUG] Modo debug - no se carga a la base de datos")
+    print(f"[DEBUG] Datos finales shape: {df_to_sql.shape}")
+    print(f"[DEBUG] Datos finales columns: {df_to_sql.columns.tolist()}")
+    print(f"[DEBUG] Primeras 5 filas:")
+    print(df_to_sql.head())
+    print(f"Datos procesados exitosamente ({len(df_to_sql)} registros).")
+else:
+    # Eliminar registros existentes de la misma fecha en la base de datos
+    with engine.connect() as connection:
 
-    delete_query = text(f"DELETE FROM Tbl_Ocupacion_Activaciones WHERE fecha = '{fecha}'")
-    connection.execute(delete_query)
-    connection.execute(text("COMMIT"))
-    print(f"Registros eliminados de la base de datos fecha: {fecha}.")
-    
-    
-    #Cargar los datos combinados a la base de datos
-with engine.connect() as connection:
-    df_to_sql.to_sql('Tbl_Ocupacion_Activaciones', con=connection, if_exists='append',index=False)
-    connection.execute(text("COMMIT"))
-print(f"Datos cargados exitosamente en la base de datos ({len(df_to_sql)} registros).")
+        delete_query = text(f"DELETE FROM Tbl_Ocupacion_Activaciones WHERE fecha = '{fecha}'")
+        connection.execute(delete_query)
+        connection.execute(text("COMMIT"))
+        print(f"Registros eliminados de la base de datos fecha: {fecha}.")
+        
+        
+        #Cargar los datos combinados a la base de datos
+    with engine.connect() as connection:
+        df_to_sql.to_sql('Tbl_Ocupacion_Activaciones', con=connection, if_exists='append',index=False)
+        connection.execute(text("COMMIT"))
+    print(f"Datos cargados exitosamente en la base de datos ({len(df_to_sql)} registros).")
