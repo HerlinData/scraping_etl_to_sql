@@ -22,16 +22,35 @@ class HybridScrapeBot_Dashboard:
         """Obtener datos de la base de datos SQLite"""
         try:
             if not self.db_path.exists():
-                return {'error': 'Base de datos no encontrada'}
+                return {
+                    'sessions': [],
+                    'module_errors': [],
+                    'error': None,
+                    'message': 'Base de datos no existe aún - esperando primera ejecución'
+                }
                 
             conn = sqlite3.connect(str(self.db_path))
             cursor = conn.cursor()
+            
+            # Verificar si las tablas existen
+            cursor.execute("""
+                SELECT name FROM sqlite_master WHERE type='table' AND name='execution_sessions'
+            """)
+            
+            if not cursor.fetchone():
+                conn.close()
+                return {
+                    'sessions': [],
+                    'module_errors': [],
+                    'error': None,
+                    'message': 'Tablas no creadas aún - esperando primera ejecución'
+                }
             
             # Obtener sesiones de hoy
             today = datetime.now().strftime('%Y-%m-%d')
             cursor.execute("""
                 SELECT started_at, status, total_modules, successful_modules, duration_seconds
-                FROM sessions 
+                FROM execution_sessions 
                 WHERE DATE(started_at) = ? 
                 ORDER BY started_at DESC
             """, (today,))
@@ -41,16 +60,16 @@ class HybridScrapeBot_Dashboard:
                 sessions.append({
                     'started_at': row[0],
                     'status': row[1],
-                    'total_modules': row[2],
-                    'successful_modules': row[3],
-                    'duration_seconds': row[4]
+                    'total_modules': row[2] or 0,
+                    'successful_modules': row[3] or 0,
+                    'duration_seconds': row[4] or 0
                 })
             
             # Obtener errores por módulo de hoy
             cursor.execute("""
                 SELECT m.session_id, m.module_name, m.status, m.error_message, s.started_at
-                FROM modules m
-                JOIN sessions s ON m.session_id = s.id
+                FROM module_executions m
+                JOIN execution_sessions s ON m.session_id = s.session_id
                 WHERE DATE(s.started_at) = ? AND m.status = 'failed'
                 ORDER BY s.started_at DESC
             """, (today,))
@@ -61,7 +80,7 @@ class HybridScrapeBot_Dashboard:
                     'session_id': row[0],
                     'module_name': row[1],
                     'status': row[2],
-                    'error_message': row[3],
+                    'error_message': row[3] or 'Error sin descripción',
                     'session_time': row[4]
                 })
             
@@ -70,11 +89,16 @@ class HybridScrapeBot_Dashboard:
             return {
                 'sessions': sessions,
                 'module_errors': module_errors,
-                'error': None
+                'error': None,
+                'message': None
             }
             
         except Exception as e:
-            return {'error': f'Error accediendo a la base de datos: {e}'}
+            return {
+                'sessions': [],
+                'module_errors': [],
+                'error': f'Error accediendo a la base de datos: {e}'
+            }
 
     def get_system_status(self, sessions):
         """Determinar el estado general del sistema"""
@@ -257,6 +281,10 @@ class HybridScrapeBot_Dashboard:
         
         if db_data.get('error'):
             return self.generate_error_html(db_data['error'])
+        
+        # Si no hay error pero tampoco datos, mostrar estado de espera
+        if db_data.get('message') and not db_data['sessions']:
+            return self.generate_waiting_html(db_data['message'])
         
         sessions = db_data['sessions']
         module_errors = db_data['module_errors']
@@ -467,6 +495,7 @@ class HybridScrapeBot_Dashboard:
         <head>
             <title>ScrapeBot - Error</title>
             <meta charset="utf-8">
+            <meta http-equiv="refresh" content="30">
             <style>
                 body {{
                     font-family: 'Courier New', monospace;
@@ -489,6 +518,78 @@ class HybridScrapeBot_Dashboard:
                 <h2>❌ Error en el Dashboard</h2>
                 <p>{error_message}</p>
                 <p><em>Reintentando en 30 segundos...</em></p>
+            </div>
+        </body>
+        </html>
+        """
+
+    def generate_waiting_html(self, message):
+        """Generar HTML de estado de espera"""
+        next_exec, minutes_until = self.get_next_execution_time()
+        next_exec_str = f"{next_exec}" + (f" (en {minutes_until} min)" if minutes_until > 0 else "")
+        
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>ScrapeBot - Esperando Datos</title>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="30">
+            <style>
+                body {{
+                    font-family: 'Courier New', monospace;
+                    margin: 40px;
+                    background: #1e1e1e;
+                    color: #ffffff;
+                    text-align: center;
+                }}
+                .waiting {{
+                    background: #2d2d2d;
+                    border: 2px solid #4a4a4a;
+                    padding: 40px;
+                    border-radius: 8px;
+                    display: inline-block;
+                    max-width: 600px;
+                }}
+                .status {{
+                    font-size: 24px;
+                    margin-bottom: 20px;
+                    color: #60a5fa;
+                }}
+                .info {{
+                    margin: 15px 0;
+                    font-size: 16px;
+                }}
+                .next-exec {{
+                    background: #1a1a1a;
+                    padding: 15px;
+                    border-radius: 4px;
+                    margin: 20px 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="waiting">
+                <div class="status">⏳ SCRAPEBOT - ESPERANDO PRIMERA EJECUCIÓN</div>
+                <div class="info">{message}</div>
+                
+                <div class="next-exec">
+                    <strong>Próxima ejecución programada:</strong><br>
+                    {next_exec_str}
+                </div>
+                
+                <div class="info">
+                    <strong>Horarios de ejecución:</strong><br>
+                    10:50 | 11:50 | 12:50 | 13:50 | 14:50 | 15:50 | 16:50 | 17:50 | 18:50
+                </div>
+                
+                <div class="info">
+                    <em>El dashboard se actualizará automáticamente cuando comience la primera ejecución</em>
+                </div>
+                
+                <div style="margin-top: 30px; font-size: 12px; color: #9ca3af;">
+                    🔄 Auto-refresh cada 30 segundos &nbsp;&nbsp; 🕐 {datetime.now().strftime('%H:%M:%S')}
+                </div>
             </div>
         </body>
         </html>
