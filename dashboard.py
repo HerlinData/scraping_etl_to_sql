@@ -165,6 +165,9 @@ class ScrapeBot_Dashboard:
             session_stats = daily_summary['sessions']
             module_stats = daily_summary['modules']
             
+            # Asegurar que los valores no sean None
+            avg_duration = session_stats.get('avg_duration', 0) or 0
+            
             html += f"""
                 <div class="card">
                     <h2>📊 Resumen del Día</h2>
@@ -175,7 +178,7 @@ class ScrapeBot_Dashboard:
                         <strong>Módulos:</strong> {module_stats['successful_executions']}/{module_stats['total_executions']} exitosos
                     </div>
                     <div class="metric">
-                        <strong>Duración promedio:</strong> {session_stats['avg_duration']:.1f} segundos
+                        <strong>Duración promedio:</strong> {avg_duration:.1f} segundos
                     </div>
                 </div>
             """
@@ -213,9 +216,12 @@ class ScrapeBot_Dashboard:
             for session in recent_sessions[:10]:  # Últimas 10
                 started_at = session.get('started_at', '')
                 status_session = session.get('status', 'unknown')
-                total_modules = session.get('total_modules', 0)
-                successful_modules = session.get('successful_modules', 0)
-                duration = session.get('duration_seconds', 0)
+                total_modules = session.get('total_modules', 0) or 0
+                successful_modules = session.get('successful_modules', 0) or 0
+                duration = session.get('duration_seconds', 0) or 0
+                
+                # Asegurar que las variables no sean None
+                status_session = status_session or 'unknown'
                 
                 status_emoji = {
                     'success': '✅',
