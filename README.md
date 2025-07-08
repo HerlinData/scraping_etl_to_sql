@@ -8,7 +8,7 @@ Sistema automatizado para extraer reportes operativos del sistema SalesYs de tel
 # Ejecutar sistema principal
 python main.py
 
-# Ver dashboard de monitoreo
+# Ver dashboard de monitoreo (NUEVO - Dashboard Híbrido)
 python dashboard.py
 
 # Ver estado del sistema
