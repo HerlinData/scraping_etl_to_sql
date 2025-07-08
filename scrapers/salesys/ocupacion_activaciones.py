@@ -1,23 +1,16 @@
 import pandas as pd
 import sys
+import sqlalchemy
+from sqlalchemy import create_engine,text,Table, MetaData
 import locale
+import pyodbc
+import pandas as pd
 from datetime import datetime
 from datetime import datetime, timedelta
+
+from unidecode import unidecode
 import warnings
 warnings.filterwarnings('ignore')
-
-# Imports condicionales para evitar errores en debug
-DEBUG_MODE = False  # Cambiar a True para debug con datos simulados
-
-if not DEBUG_MODE:
-    import sqlalchemy
-    from sqlalchemy import create_engine,text,Table, MetaData
-    import pyodbc
-    from unidecode import unidecode
-else:
-    # Para debug, usar una función simple
-    def unidecode(text):
-        return text
 
 def conectar_bd(servidor, nombre_base_datos, usuario, contraseña):
     connection_string = f'mssql+pyodbc://{usuario}:{contraseña}@{servidor}/{nombre_base_datos}?driver=ODBC+Driver+17+for+SQL+Server'
@@ -25,83 +18,20 @@ def conectar_bd(servidor, nombre_base_datos, usuario, contraseña):
     print('Conexión exitosa')
     return engine
 
-franjas = pd.read_csv('/mnt/c/Users/Herlin/Desktop/scrap_claude/scrapers/salesys/franjas_horarias.csv', sep=',')
+franjas = pd.read_csv('Z:\\AMG Esuarezh\\scraping\\scrapers\\salesys\\franjas_horarias.csv', sep=',')
 
-if DEBUG_MODE:
-    print("[DEBUG] Modo debug activado - usando datos simulados")
-    # Crear datos simulados para debug
-    df = pd.DataFrame({
-        'codigo_salesys': [1001, 1002, 1003],
-        'asesor': ['Agente1', 'Agente2', 'Agente3'],
-        'hora_inicio_call_center': pd.to_datetime(['2025-07-08 10:30:00', '2025-07-08 11:00:00', '2025-07-08 14:00:00']),
-        'hora_fin_call_center': pd.to_datetime(['2025-07-08 10:45:00', '2025-07-08 11:30:00', '2025-07-08 14:30:00'])
-    })
-    
-    df_2 = pd.DataFrame({
-        'fecha': pd.to_datetime(['2025-07-08', '2025-07-08', '2025-07-08', '2025-07-08']),
-        'codigo_salesys': [1001, 1002, 1001, 1002],
-        'funcion': ['SON - Sign On', 'SON - Sign On', 'RES - RESUME', 'RES - RESUME'],
-        'hora_inicio': pd.to_datetime(['2025-07-08 10:00:00', '2025-07-08 10:30:00', '2025-07-08 10:15:00', '2025-07-08 10:45:00']),
-        'hora_fin': pd.to_datetime(['2025-07-08 10:30:00', '2025-07-08 11:00:00', '2025-07-08 10:45:00', '2025-07-08 11:15:00'])
-    })
-    
-    df_3 = pd.DataFrame({
-        'fecha': pd.to_datetime(['2025-07-08', '2025-07-08', '2025-07-08']),
-        'codigo_salesys': [1001, 1002, 1003],
-        'nombre': ['Juan Perez', 'Maria Lopez', 'Carlos Gomez'],
-        'condicion': ['Activo', 'Activo', 'Activo'],
-        'cargo': ['Asesor', 'Asesor', 'Asesor'],
-        'campana': ['ACTIVACIONES', 'ACTIVACIONES', 'ACTIVACIONES']
-    })
-    
-    engine = None  # No necesitamos conexión real en modo debug
-else:
-    servidor = '192.168.16.103'
-    nombre_base_datos = 'BD_AMG'
-    usuario = 'sqladmin'
-    contraseña = 'Rf1pGIw7C42m'
-    engine = conectar_bd(servidor, nombre_base_datos, usuario, contraseña)
-    
-    # Leer datos desde la base de datos a un DataFrame
-    print(f"[DEBUG] Consultando datos para fecha: {fecha}")
-    
-    query1 = f"""SELECT nombre_usuario codigo_salesys, asesor, hora_inicio_call_center,
-                        hora_fin_call_center FROM TblActivacionesBD 
-                            WHERE CONVERT(DATE, hora_inicio_call_center ) = '{fecha}'
-                            AND NOT hora_inicio_call_center IS NULL"""
-    print(f"[DEBUG] Query1: {query1}")
-    
-    with engine.connect() as connection:
-        df = pd.read_sql(query1, con=connection)
-    print(f"[DEBUG] df (activaciones) shape: {df.shape}")
-
-    query2 = f"SELECT CONVERT(DATE, hora_inicio) fecha, codigo_del_agente codigo_salesys, [FUNCION] funcion, [hora_inicio], [hora_fin] FROM TblEstadoAgenteSaleSysBD WHERE CONVERT(DATE,[hora_inicio]) = '{fecha}'"
-    print(f"[DEBUG] Query2: {query2}")
-    
-    with engine.connect() as connection:
-        df_2 = pd.read_sql(query2, con=connection)
-    df_2['fecha'] = pd.to_datetime(df_2['fecha'])
-    print(f"[DEBUG] df_2 (estado_agente) shape: {df_2.shape}")
-
-    query3 = f"SELECT [fecha], [Codigo SaleSys] codigo_salesys, [Nombre Completo] nombre, [condicion], [cargo], [CAMPAÑA] campana FROM View_TblNomina WHERE CONVERT(DATE, [fecha]) = '{fecha}' AND campaña = 'ACTIVACIONES'"
-    print(f"[DEBUG] Query3: {query3}")
-    
-    with engine.connect() as connection:
-        df_3 = pd.read_sql(query3, con=connection)
-    df_3['codigo_salesys'] = df_3['codigo_salesys'].astype('Int64')
-    df_3['fecha'] = pd.to_datetime(df_3['fecha'])
-    print(f"[DEBUG] df_3 (nomina) shape: {df_3.shape}")
+servidor = '192.168.16.103'
+nombre_base_datos = 'BD_AMG'
+usuario = 'sqladmin'
+contraseña = 'Rf1pGIw7C42m'
+engine = conectar_bd(servidor, nombre_base_datos, usuario, contraseña)
 
 
 # Establecer configuración regional en español
-try:
-    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
-except locale.Error:
-    print("[DEBUG] No se pudo establecer locale es_ES.UTF-8, usando default")
-    locale.setlocale(locale.LC_TIME, 'C')
+locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
 
 # Leer fecha/hora compartida desde archivo
-with open("/mnt/c/Users/Herlin/Desktop/scrap_claude/shared_timestamp.txt", "r") as f:
+with open("shared_timestamp.txt", "r") as f:
     fecha_hora = f.read().strip()
 
           
@@ -112,7 +42,23 @@ dia = fechacompleta.strftime('%d')
 mes = fechacompleta.strftime('%m')
 año = fechacompleta.year
 
-# Los datos se cargan arriba en el bloque DEBUG_MODE o en el bloque de producción
+# Leer datos desde la base de datos a un DataFrame
+with engine.connect() as connection:
+    df = pd.read_sql(f"""SELECT nombre_usuario codigo_salesys, asesor, hora_inicio_call_center,
+                            hora_fin_call_center FROM TblActivacionesBD 
+                                WHERE CONVERT(DATE, hora_inicio_call_center ) = '{fecha}'
+                                AND NOT hora_inicio_call_center IS NULL""", con=connection)
+
+with engine.connect() as connection:
+    df_2 = pd.read_sql(f"SELECT CONVERT(DATE, hora_inicio) fecha, codigo_del_agente codigo_salesys, [FUNCION] funcion, [hora_inicio], [hora_fin] FROM TblEstadoAgenteSaleSysBD WHERE CONVERT(DATE,[hora_inicio]) = '{fecha}'", con=connection)
+df_2['fecha'] = pd.to_datetime(df_2['fecha'])
+
+with engine.connect() as connection:
+    df_3 = pd.read_sql(f"SELECT [fecha], [Codigo SaleSys] codigo_salesys, [Nombre Completo] nombre, [condicion], [cargo], [CAMPAÑA] campana FROM View_TblNomina WHERE CONVERT(DATE, [fecha]) = '{fecha}' AND campaña = 'ACTIVACIONES'", con=connection)
+df_3['codigo_salesys'] = df_3['codigo_salesys'].astype('Int64')
+df_3['fecha'] = pd.to_datetime(df_3['fecha'])
+
+
 
 ###############
 fecha_hora = pd.to_datetime(fecha_hora)
@@ -191,10 +137,6 @@ def generar_tiempos_por_franja(df_agentes, df_franjas):
                     'tiempo_segundos': duracion_segundos
                })
 
-    # Asegurar que siempre retornemos un DataFrame con las columnas esperadas
-    if not resultados:
-        return pd.DataFrame(columns=['codigo_salesys', 'funcion', 'fecha', 'franja', 'tiempo_segundos'])
-    
     return pd.DataFrame(resultados)
 
 # Generar tiempos por franjas para cada registro 'SIG ON' y 'RES RESUME'
@@ -202,47 +144,35 @@ df_resultado_sig_on = generar_tiempos_por_franja(filtro_sig_on_por_nomina, franj
 df_resultado_res_resume = generar_tiempos_por_franja(filtro_res_resume_por_nomina, franjas)
 
 # Concatenar ambos DFs que tienen solo el estado agente 'SIG ON' y 'RES RESUME'
-df_consolidado = pd.concat([df_resultado_sig_on, df_resultado_res_resume], ignore_index=True)
-
-# Solo convertir fecha si hay datos
-if not df_consolidado.empty:
-    df_consolidado['fecha'] = pd.to_datetime(df_consolidado['fecha'])
+df_consolidado = pd.concat([df_resultado_sig_on, df_resultado_res_resume])
+df_consolidado['fecha'] = pd.to_datetime(df_consolidado['fecha'])
 
 df_activaciones['codigo_salesys'] = df_activaciones['codigo_salesys'].astype('Int64')
 
-# Solo procesar si hay datos consolidados
-if not df_consolidado.empty:
-    # Agrupamos por 'codigo_salesys', 'funcion', 'fecha', y 'franja', y sumamos el tiempo en segundos
-    df_consolidado_agrupado = df_consolidado.groupby(['codigo_salesys', 'funcion', 'fecha', 'franja']).agg({'tiempo_segundos': 'sum'}).reset_index()
-
-    # Cambiar los registros de la columna función por 'DISPONIBLE'
-    df_consolidado_agrupado['funcion'] = 'DISPONIBLE'  # Puedes usar cualquier etiqueta común
-
-    # Agrupar por agente, fecha, franja y sumar los tiempos
-    df_consolidado_final = df_consolidado_agrupado.groupby(['fecha', 'codigo_salesys', 'franja']).agg({'tiempo_segundos': 'sum'}).reset_index()
-    df_consolidado_final['tiempo_segundos'] = df_consolidado_final['tiempo_segundos'].astype('Int64')
-else:
-    print("[WARNING] No hay datos consolidados para procesar. Creando DataFrame vacío.")
-    df_consolidado_final = pd.DataFrame(columns=['fecha', 'codigo_salesys', 'franja', 'tiempo_segundos'])
+# Agrupamos por 'codigo_salesys', 'funcion', 'fecha', y 'franja', y sumamos el tiempo en segundos
+df_consolidado_agrupado = df_consolidado.groupby(['codigo_salesys', 'funcion', 'fecha', 'franja']).agg({'tiempo_segundos': 'sum'}).reset_index()
 
 
-# Solo hacer merge si hay datos consolidados
-if not df_consolidado_final.empty:
-    # Realizar el merge y seleccionar solo las columnas deseadas del DataFrame secundario
-    es_agente_nomina = pd.merge(
-        df_consolidado_final,
-        df_nomina[['fecha', 'codigo_salesys', 'nombre', 'condicion', 'cargo', 'campana']],  # Seleccionar columnas deseadas
-        on=['fecha', 'codigo_salesys'],
-        how='left')
+# Cambiar los registros de la columna función por 'DISPONIBLE'
+df_consolidado_agrupado['funcion'] = 'DISPONIBLE'  # Puedes usar cualquier etiqueta común
 
-    # Ordenar columnas de la tabla generada del merge
-    columnas_agen_nom = ['fecha', 'codigo_salesys', 'nombre', 'condicion', 'cargo', 'campana', 'franja', 'tiempo_segundos']
-    es_agente_nomina_select = es_agente_nomina[columnas_agen_nom]
-    es_agente_nomina_select['codigo_salesys'] = es_agente_nomina_select['codigo_salesys'].astype('Int64')
-else:
-    print("[WARNING] No hay datos para hacer merge. Creando DataFrame vacío.")
-    columnas_agen_nom = ['fecha', 'codigo_salesys', 'nombre', 'condicion', 'cargo', 'campana', 'franja', 'tiempo_segundos']
-    es_agente_nomina_select = pd.DataFrame(columns=columnas_agen_nom)
+
+# Agrupar por agente, fecha, franja y sumar los tiempos
+df_consolidado_final = df_consolidado_agrupado.groupby(['fecha', 'codigo_salesys', 'franja']).agg({'tiempo_segundos': 'sum'}).reset_index()
+df_consolidado_final['tiempo_segundos'] = df_consolidado_final['tiempo_segundos'].astype('Int64')
+
+
+# Realizar el merge y seleccionar solo las columnas deseadas del DataFrame secundario
+es_agente_nomina = pd.merge(
+    df_consolidado_final,
+    df_nomina[['fecha', 'codigo_salesys', 'nombre', 'condicion', 'cargo', 'campana']],  # Seleccionar columnas deseadas
+    on=['fecha', 'codigo_salesys'],
+    how='left')
+
+# Ordenar columnas de la tabla generada del merge
+columnas_agen_nom = ['fecha', 'codigo_salesys', 'nombre', 'condicion', 'cargo', 'campana', 'franja', 'tiempo_segundos']
+es_agente_nomina_select = es_agente_nomina[columnas_agen_nom]
+es_agente_nomina_select['codigo_salesys'] = es_agente_nomina_select['codigo_salesys'].astype('Int64')
 
 # Ordenar columnas de la tabla validaciones
 columnas_validaciones = ['asesor', 'codigo_salesys', 'hora_inicio_call_center', 'hora_fin_call_center']
@@ -327,25 +257,17 @@ df_agrupado_final_franjas = pd.merge(
 df_to_sql = df_agrupado_final_franjas.rename(columns={'hora_inicio': 'rango_15min'})
 
 
-if DEBUG_MODE:
-    print("[DEBUG] Modo debug - no se carga a la base de datos")
-    print(f"[DEBUG] Datos finales shape: {df_to_sql.shape}")
-    print(f"[DEBUG] Datos finales columns: {df_to_sql.columns.tolist()}")
-    print(f"[DEBUG] Primeras 5 filas:")
-    print(df_to_sql.head())
-    print(f"Datos procesados exitosamente ({len(df_to_sql)} registros).")
-else:
-    # Eliminar registros existentes de la misma fecha en la base de datos
-    with engine.connect() as connection:
+# Eliminar registros existentes de la misma fecha en la base de datos
+with engine.connect() as connection:
 
-        delete_query = text(f"DELETE FROM Tbl_Ocupacion_Activaciones WHERE fecha = '{fecha}'")
-        connection.execute(delete_query)
-        connection.execute(text("COMMIT"))
-        print(f"Registros eliminados de la base de datos fecha: {fecha}.")
-        
-        
-        #Cargar los datos combinados a la base de datos
-    with engine.connect() as connection:
-        df_to_sql.to_sql('Tbl_Ocupacion_Activaciones', con=connection, if_exists='append',index=False)
-        connection.execute(text("COMMIT"))
-    print(f"Datos cargados exitosamente en la base de datos ({len(df_to_sql)} registros).")
+    delete_query = text(f"DELETE FROM Tbl_Ocupacion_Activaciones WHERE fecha = '{fecha}'")
+    connection.execute(delete_query)
+    connection.execute(text("COMMIT"))
+    print(f"Registros eliminados de la base de datos fecha: {fecha}.")
+    
+    
+    #Cargar los datos combinados a la base de datos
+with engine.connect() as connection:
+    df_to_sql.to_sql('Tbl_Ocupacion_Activaciones', con=connection, if_exists='append',index=False)
+    connection.execute(text("COMMIT"))
+print(f"Datos cargados exitosamente en la base de datos ({len(df_to_sql)} registros).")
